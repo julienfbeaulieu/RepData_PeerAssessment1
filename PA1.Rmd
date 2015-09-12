@@ -1,0 +1,185 @@
+---
+title: "Peer Assessment 1"
+author: "Julien Beaulieu"
+date: "September 12, 2015"
+output: html_document
+---
+
+```{r}
+
+```
+
+
+## Loading and preprocessing the data
+###Load the data
+The data cam be inputed in R using the link provided:
+
+```{r}
+library(dplyr)
+activity <- read.csv("activity.csv")
+```
+
+A look at the data shows that it contains 3 variables: steps, date and interval.
+
+```{r}
+head(activity)
+```
+
+The *steps* variable contains a certain number of NA values. The following code shows that missing values occurs only on certain dates and for the full day:
+
+```{r}
+n_na <- with(activity, tapply(steps, date, function(x) sum(is.na(x))))
+n_na
+```
+
+###Process/transform the data (if necessary) into a format suitable for your analysis
+
+A first processing step is to convert the dates in POSIX format for further analysis:
+```{r}
+date2 <- as.Date(activity$date)
+activity <- transform(activity, date = date2)
+```
+
+A second processing step is to remove the NA values from the dataframe:
+```{r}
+activity.withoutna <- na.omit(activity)
+str(activity.withoutna)
+```
+
+
+## What is mean total number of steps taken per day?
+
+###Calculate the total number of steps taken per day
+
+The *tapply* function can be called to sum the number of 
+```{r}
+totalstepsperday <- with(activity.withoutna,tapply(steps,date,sum))
+```
+
+###Make a histogram of the total number of steps taken each day
+The following histogram shows the distribution of the total steps per day for the period studied. 
+ 
+```{r}
+hist(totalstepsperday,breaks=10)
+``` 
+
+### Report the mean and median of the total number of steps taken per day
+The mean and the median for the total number of steps per day are calculated the following way:
+```{r}
+mean <- mean(totalstepsperday, na.rm = TRUE)
+median <- median(totalstepsperday, na.rm = TRUE)
+```
+
+Namely, the mean is `r mean` and the median is `r median`.
+
+## What is the average daily activity pattern?
+###Make a time series plot 
+For each time interval, we can calculate the average number of steps. 
+```{r}
+dailypattern <- data_frame(time = seq.POSIXt(ISOdatetime(2000,01,01,0,0,0), ISOdatetime(2000,01,01,23,55,0), by = "5 mins"), meansteps = with(activity.withoutna,tapply(steps,interval,mean, na.rm=TRUE)))
+```
+
+The following plot shows the average number of steps as a function of time in the day. 
+```{r}
+plot(dailypattern, xlab = "time of the day (minutes)", ylab = "average number of steps", type = "l")
+```
+
+A first observation is there is typically no activity from 10pm to 6am. Also, peaks in activity can be observed at around 9am, noon, 4pm and 7pm.
+
+###5-minute interval with maximum average number of steps
+
+The following code finds the maximum peak in the daily pattern.
+
+```{r}
+maximum <- max(dailypattern$meansteps)
+timemax <- which.max(dailypattern$meansteps)
+```
+
+Namely, the maximum mean steps is `r maximum` and is observed at time 8:35am.
+
+
+## Imputing missing values
+### Count missing values
+
+As shown above, certain days contain no steps data. The following code count the number of missing values:
+```{r}
+sum.na <- sum(is.na(activity$steps))
+```
+
+Namely, `r sum.na` do not have any information about the number of steps at each 5-minute intervals.
+
+### Strategy for filling in all of the missing values in the dataset
+Considering the little information we have, the best strategy for imputing the missing values is to replace any missing steps data for a given interval by the mean steps observed at that time. First, this would assure that we do not expect steps at hours of the night. Second, this should have no effect on the average number of steps per day for the whole dataset.
+
+### Create new dataset
+In the following code, a new dataframe similar to the original one is created. For any missing value, an *ifelse* statement get the mean steps at that time.
+
+```{r}
+activity.new <- activity
+numberofdays <- length(unique(activity$date))
+activity.new$meansteps <- rep(dailypattern$meansteps, numberofdays)
+activity.new$steps2 <- ifelse(is.na(activity.new$steps),activity.new$meansteps, activity.new$steps)
+```
+
+### Make a histogram
+
+The total number of steps per day can be recalculated for each day. The histogram of the total number of steps shows a similar distribution then reported before, except for the central column which has been "boosted". Therefore, the imputing strategy did effect the distribution of the estimates for the total number of steps taken per day.
+
+```{r}
+totalstepsperday.new <- with(activity.new,tapply(steps2,date,sum))
+hist(totalstepsperday.new,breaks=10)
+```
+
+### Report new mean and median
+
+```{r}
+mean.new <- mean(totalstepsperday.new)
+median.new <- median(totalstepsperday.new)
+```
+
+The mean and the median for the new distributions are calculated to be `r mean.new` and `r median.new`, respectively.
+As stated above, the imputing strategy had no impact on the data mean and median.
+
+
+## Are there differences in activity patterns between weekdays and weekends?
+### Create a new factor
+
+The following code extract the weekdays for each of the dates. The dataset containing no missing values is used since the last section showed that imputing missing values had an incidence on the estimates of the total steps per day. Saturdays and sundays are recorded as weekend, and the rest as weekday. The data is then splited in two based on this factor.
+
+```{r}
+activity.withoutna$day <- weekdays(activity.withoutna$date)
+activity.withoutna$weekend <- ifelse(activity.withoutna$day == "Saturday" | activity.withoutna$day == "Sunday", "weekend", "weekday")
+
+activity.weekday <- subset(activity.withoutna, weekend == "weekday")
+activity.weekend <- subset(activity.withoutna, weekend == "weekend")
+```
+
+A separate daily pattern can be calculated for the two datasets:
+
+```{r}
+weeklypattern <- data_frame(time = seq.POSIXt(ISOdatetime(2000,01,01,0,0,0), ISOdatetime(2000,01,01,23,55,0), by = "5 mins"),
+                           weekday.meansteps = with(activity.weekday,tapply(steps,interval,mean, na.rm=TRUE)),
+                           weekend.meansteps = with(activity.weekend,tapply(steps,interval,mean, na.rm=TRUE)))
+```
+
+Finaly, the following plots the average daily pattern for the weekdays and the weekends seperatly:
+
+```{r}
+par(mfrow = c(2,1))
+plot(weeklypattern$time,
+     weeklypattern$weekday.meansteps, 
+     xlab = "time of the day (minutes)", 
+     ylab = "average number of steps", 
+     main = "Weekdays",
+     type = "l")
+plot(weeklypattern$time,
+     weeklypattern$weekend.meansteps, 
+     xlab = "time of the day (minutes)", 
+     ylab = "average number of steps", 
+     main = "Weekends",
+     type = "l")
+
+```
+
+Interestingly, the walking habbits during the week and the weekend are very different. Peaks are more frequent on the weekend, and a peak of activity is shown in the evening. In general, there seems to be more activity on the weekend than on the weekdays.
+
